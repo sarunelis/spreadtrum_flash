@@ -13,7 +13,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 */
-#ifndef INTERACTIVE
+#ifdef INTERACTIVE
 #define _GNU_SOURCE 1
 #define _FILE_OFFSET_BITS 64
 
@@ -998,9 +998,12 @@ int main(int argc, char **argv) {
 #endif
 	spdio_t *io; int ret, i;
 	int wait = 30 * REOPEN_FREQ;
-	int verbose = 0, fdl_loaded = 0, exec_addr = 0;
+	int verbose = 0, fdl1_loaded = 0, fdl2_loaded = 0, argcount = 0, exec_addr = 0;
 	uint32_t ram_addr = ~0u;
 	int keep_charge = 1, end_data = 1, blk_size = 0;
+	char *temp;
+	char str1[1000];
+	char str2[10][100];
 	char exechex[5];
 	char execfile[32];
 	int selflen = strlen(argv[0]);
@@ -1093,25 +1096,47 @@ int main(int argc, char **argv) {
 		exec_addr = strtoll(exechex, NULL, 16);
 	}
 
-	while (argc > 1) {
-		if (!strcmp(argv[1], "fdl")) {
-			const char *fn; uint32_t addr = 0; char *end;
-			if (argc <= 3) ERR_EXIT("bad command\n");
+	while (1) {
+		memset(str1, 0, sizeof(str1));
+		memset(str2, 0, sizeof(str2));
+		argcount = 1;
 
-			fn = argv[2];
-			end = argv[3];
+		printf("input >");
+		ret = scanf( "%[^\n]", str1);
+		while('\n' != getchar());
+
+		temp = strtok(str1," ");
+		while(temp)
+		{
+			memcpy(str2[argcount++], temp, strlen(temp)+1);
+			temp = strtok(NULL," ");
+		}
+
+		if (!strcmp(str2[1], "fdl1")) {
+			const char *fn; uint32_t addr = 0; char *end;FILE *fi;
+			if (argcount <= 3) { DBG_LOG("bad command\n");continue; }
+
+			fn = str2[2];
+			fi = fopen(fn, "r");
+			if (fi == NULL) { DBG_LOG("File does not exist.\n");continue; }
+			else fclose(fi);
+
+			end = str2[3];
 			if (!memcmp(end, "ram", 3)) {
 				int a = end[3];
 				if (a != '+' && a)
-					ERR_EXIT("bad command args\n");
+					{ DBG_LOG("bad command args\n");continue; }
 				if (ram_addr == ~0u)
-					ERR_EXIT("ram address is unknown\n");
+					{ DBG_LOG("ram address is unknown\n");continue; }
 				end += 3; addr = ram_addr;
 			}
 			addr += strtoll(end, &end, 0);
-			if (*end) ERR_EXIT("bad command args\n");
+			if (*end) { DBG_LOG("bad command args\n");continue; }
 
-			if (!fdl_loaded) {
+			if (fdl1_loaded) {
+				DBG_LOG("FDL1 ALREADY LOADED, SKIP\n");
+				continue;
+			} else {
 				send_file(io, fn, addr, end_data, 528);
 				DBG_LOG("SEND FDL1\n");
 
@@ -1157,180 +1182,208 @@ int main(int argc, char **argv) {
 					send_and_check(io);
 					DBG_LOG("KEEP_CHARGE FDL1\n");
 				}
+				fdl1_loaded = 1;
+			}
+		} else if (!strcmp(str2[1], "fdl2")) {
+			const char *fn; uint32_t addr = 0; char *end;FILE *fi;
+			if (argcount <= 3) { DBG_LOG("bad command\n");continue; }
+
+			fn = str2[2];
+			fi = fopen(fn, "r");
+			if (fi == NULL) { DBG_LOG("File does not exist.\n");continue; }
+			else fclose(fi);
+
+			end = str2[3];
+			if (!memcmp(end, "ram", 3)) {
+				int a = end[3];
+				if (a != '+' && a)
+					{ DBG_LOG("bad command args\n");continue; }
+				if (ram_addr == ~0u)
+					{ DBG_LOG("ram address is unknown\n");continue; }
+				end += 3; addr = ram_addr;
+			}
+			addr += strtoll(end, &end, 0);
+			if (*end) { DBG_LOG("bad command args\n");continue; }
+
+			if (!fdl1_loaded) {
+				DBG_LOG("FDL1 NOT READY, LOAD FDL1 FIRST\n");
+				continue;
+			} else if (fdl2_loaded) {
+				DBG_LOG("FDL2 ALREADY LOADED, SKIP\n");
+				continue;
 			} else {
 				send_file(io, fn, addr, end_data,
 					blk_size ? blk_size : 2112);
 				DBG_LOG("SEND %s\n", fn);
 			}
 
-			fdl_loaded++;
-			argc -= 3; argv += 3;
-
-		} else if (!strcmp(argv[1], "exec")) {
-			if (fdl_loaded > 1) {
+		} else if (!strcmp(str2[1], "exec")) {
+			if (fdl2_loaded) {
+				DBG_LOG("FDL2 ALREADY LOADED, SKIP\n");
+				continue;
+			}
+			else if (fdl1_loaded) {
 				encode_msg(io, BSL_CMD_EXEC_DATA, NULL, 0);
 				send_msg(io);
 				// Feature phones respond immediately,
 				// but it may take a second for a smartphone to respond.
 				ret = recv_msg_timeout(io, 15000);
-				if (!ret) ERR_EXIT("timeout reached\n");
+				if (!ret) { DBG_LOG("timeout reached\n");continue; }
 				ret = recv_type(io);
 				// Is it always bullshit?
 				if (ret == BSL_REP_INCOMPATIBLE_PARTITION)
 					DBG_LOG("FDL2: incompatible partition\n");
 				else if (ret != BSL_REP_ACK)
-					ERR_EXIT("unexpected response (0x%04x)\n", ret);
+					{ DBG_LOG("unexpected response (0x%04x)\n", ret);continue; }
 				DBG_LOG("EXEC FDL2\n");
+				fdl2_loaded = 1;
 			}
-			argc -= 1; argv += 1;
 
-		} else if (!strcmp(argv[1], "exec_addr")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
-			else {
-				exec_addr = strtoll(argv[2], NULL, 0);
-				DBG_LOG("current exec_addr is 0x%x\n", exec_addr);
-			}
-			argc -= 2; argv += 2;
+		} else if (!strcmp(str2[1], "exec_addr")) {
+			if (argcount > 2)
+				exec_addr = strtoll(str2[2], NULL, 0);
+			DBG_LOG("current exec_addr is 0x%x\n", exec_addr);
 
-		} else if (!strcmp(argv[1], "read_flash")) {
+		} else if (!strcmp(str2[1], "read_flash")) {
 			const char *fn; uint64_t addr, offset, size;
-			if (argc <= 5) ERR_EXIT("bad command\n");
+			if (argcount <= 5) { DBG_LOG("bad command\n");continue; }
 
-			addr = str_to_size(argv[2]);
-			offset = str_to_size(argv[3]);
-			size = str_to_size(argv[4]);
-			fn = argv[5];
+			addr = str_to_size(str2[2]);
+			offset = str_to_size(str2[3]);
+			size = str_to_size(str2[4]);
+			fn = str2[5];
 			if ((addr | size | offset | (addr + offset + size)) >> 32)
-				ERR_EXIT("32-bit limit reached\n");
+				{ DBG_LOG("32-bit limit reached\n");continue; }
 			dump_flash(io, addr, offset, size, fn,
 					blk_size ? blk_size : 1024);
-			argc -= 5; argv += 5;
 
-		} else if (!strcmp(argv[1], "read_mem")) {
+		} else if (!strcmp(str2[1], "read_mem")) {
 			const char *fn; uint64_t addr, size;
-			if (argc <= 4) ERR_EXIT("bad command\n");
+			if (argcount <= 4) { DBG_LOG("bad command\n");continue; }
 
-			addr = str_to_size(argv[2]);
-			size = str_to_size(argv[3]);
-			fn = argv[4];
+			addr = str_to_size(str2[2]);
+			size = str_to_size(str2[3]);
+			fn = str2[4];
 			if ((addr | size | (addr + size)) >> 32)
-				ERR_EXIT("32-bit limit reached\n");
+				{ DBG_LOG("32-bit limit reached\n");continue; }
 			dump_mem(io, addr, size, fn,
 					blk_size ? blk_size : 1024);
-			argc -= 4; argv += 4;
 
-		} else if (!strcmp(argv[1], "part_size")) {
+		} else if (!strcmp(str2[1], "part_size")) {
 			const char *name;
-			if (argc <= 2) ERR_EXIT("bad command\n");
+			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
 
-			name = argv[2];
+			name = str2[2];
 			find_partition_size(io, name);
-			argc -= 2; argv += 2;
 
-		} else if (!strcmp(argv[1], "read_part")) {
+		} else if (!strcmp(str2[1], "read_part")) {
 			const char *name, *fn; uint64_t offset, size;
-			if (argc <= 5) ERR_EXIT("bad command\n");
+			if (argcount <= 5) { DBG_LOG("bad command\n");continue; }
 
-			name = argv[2];
-			offset = str_to_size(argv[3]);
-			size = str_to_size(argv[4]);
-			fn = argv[5];
+			name = str2[2];
+			offset = str_to_size(str2[3]);
+			size = str_to_size(str2[4]);
+			fn = str2[5];
 			if (offset + size < offset)
-				ERR_EXIT("64-bit limit reached\n");
+				{ DBG_LOG("64-bit limit reached\n");continue; }
 			dump_partition(io, name, offset, size, fn,
 					blk_size ? blk_size : 4096);
-			argc -= 5; argv += 5;
 
-		} else if (!strcmp(argv[1], "partition_list")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
-			partition_list(io, argv[2]);
-			argc -= 2; argv += 2;
+		} else if (!strcmp(str2[1], "partition_list")) {
+			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			partition_list(io, str2[2]);
 
-		} else if (!strcmp(argv[1], "repartition")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
-			repartition(io, argv[2]);
-			argc -= 2; argv += 2;
+		} else if (!strcmp(str2[1], "repartition")) {
+			const char *fn;FILE *fi;
+			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			fn = str2[2];
+			fi = fopen(fn, "r");
+			if (fi == NULL) { DBG_LOG("File does not exist.\n");continue; }
+			else fclose(fi);
+			repartition(io, str2[2]);
 
-		} else if (!strcmp(argv[1], "erase_part")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
-			erase_partition(io, argv[2]);
-			argc -= 2; argv += 2;
+		} else if (!strcmp(str2[1], "erase_part")) {
+			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			erase_partition(io, str2[2]);
 
-		} else if (!strcmp(argv[1], "write_part")) {
-			if (argc <= 3) ERR_EXIT("bad command\n");
-			load_partition(io, argv[2], argv[3],
+		} else if (!strcmp(str2[1], "write_part")) {
+			const char *fn;FILE *fi;
+			if (argcount <= 3) { DBG_LOG("bad command\n");continue; }
+			fn = str2[3];
+			fi = fopen(fn, "r");
+			if (fi == NULL) { DBG_LOG("File does not exist.\n");continue; }
+			else fclose(fi);
+			load_partition(io, str2[2], str2[3],
 					blk_size ? blk_size : 4096);
-			argc -= 3; argv += 3;
 
-		} else if (!strcmp(argv[1], "read_pactime")) {
+		} else if (!strcmp(str2[1], "read_pactime")) {
 			read_pactime(io);
-			argc -= 1; argv += 1;
 
-		} else if (!strcmp(argv[1], "blk_size")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
-			blk_size = strtol(argv[2], NULL, 0);
+		} else if (!strcmp(str2[1], "blk_size")) {
+			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			blk_size = strtol(str2[2], NULL, 0);
 			blk_size = blk_size < 0 ? 0 :
 					blk_size > 0xffff ? 0xffff : blk_size;
-			argc -= 2; argv += 2;
 
-		} else if (!strcmp(argv[1], "chip_uid")) {
+		} else if (!strcmp(str2[1], "chip_uid")) {
 			encode_msg(io, BSL_CMD_READ_CHIP_UID, NULL, 0);
 			send_msg(io);
 			ret = recv_msg(io);
 			if ((ret = recv_type(io)) != BSL_REP_READ_CHIP_UID)
-				ERR_EXIT("unexpected response (0x%04x)\n", ret);
+				{ DBG_LOG("unexpected response (0x%04x)\n", ret);continue; }
 
 			DBG_LOG("BSL_REP_READ_CHIP_UID: ");
 			print_string(stderr, io->raw_buf + 4, READ16_BE(io->raw_buf + 2));
-			argc -= 1; argv += 1;
 
-		} else if (!strcmp(argv[1], "disable_transcode")) {
+		} else if (!strcmp(str2[1], "disable_transcode")) {
 			encode_msg(io, BSL_CMD_DISABLE_TRANSCODE, NULL, 0);
 			send_and_check(io);
 			io->flags &= ~FLAGS_TRANSCODE;
-			argc -= 1; argv += 1;
 
-		} else if (!strcmp(argv[1], "transcode")) {
+		} else if (!strcmp(str2[1], "transcode")) {
 			unsigned a, f;
-			if (argc <= 2) ERR_EXIT("bad command\n");
-			a = atoi(argv[2]);
-			if (a >> 1) ERR_EXIT("bad command\n");
+			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			a = atoi(str2[2]);
+			if (a >> 1) { DBG_LOG("bad command\n");continue; }
 			f = (io->flags & ~FLAGS_TRANSCODE);
 			io->flags = f | (a ? FLAGS_TRANSCODE : 0);
-			argc -= 2; argv += 2;
 
-		} else if (!strcmp(argv[1], "keep_charge")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
-			keep_charge = atoi(argv[2]);
-			argc -= 2; argv += 2;
+		} else if (!strcmp(str2[1], "keep_charge")) {
+			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			keep_charge = atoi(str2[2]);
 
-		} else if (!strcmp(argv[1], "timeout")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
-			io->timeout = atoi(argv[2]);
-			argc -= 2; argv += 2;
+		} else if (!strcmp(str2[1], "timeout")) {
+			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			io->timeout = atoi(str2[2]);
 
-		} else if (!strcmp(argv[1], "end_data")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
-			end_data = atoi(argv[2]);
-			argc -= 2; argv += 2;
+		} else if (!strcmp(str2[1], "end_data")) {
+			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			end_data = atoi(str2[2]);
 
-		} else if (!strcmp(argv[1], "reset")) {
+		} else if (!strcmp(str2[1], "reset")) {
+			if (!fdl2_loaded) {
+				DBG_LOG("FDL2 NOT READY\n");
+				continue;
+			}
 			encode_msg(io, BSL_CMD_NORMAL_RESET, NULL, 0);
 			send_and_check(io);
-			argc -= 1; argv += 1;
+			break;
 
-		} else if (!strcmp(argv[1], "poweroff")) {
+		} else if (!strcmp(str2[1], "poweroff")) {
+			if (!fdl2_loaded) {
+				DBG_LOG("FDL2 NOT READY\n");
+				continue;
+			}
 			encode_msg(io, BSL_CMD_POWER_OFF, NULL, 0);
 			send_and_check(io);
-			argc -= 1; argv += 1;
+			break;
 
-		} else if (!strcmp(argv[1], "verbose")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
-			io->verbose = atoi(argv[2]);
-			argc -= 2; argv += 2;
+		} else if (!strcmp(str2[1], "verbose")) {
+			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			io->verbose = atoi(str2[2]);
 
-		} else {
-			ERR_EXIT("unknown command\n");
+		} else if (strlen(str2[1])){
+			DBG_LOG("unknown command\n");
 		}
 	}
 
