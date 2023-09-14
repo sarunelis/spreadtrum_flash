@@ -1167,7 +1167,36 @@ int main(int argc, char **argv) {
 
 				DBG_LOG("BSL_REP_VER: ");
 				print_string(stderr, io->raw_buf + 4, READ16_BE(io->raw_buf + 2));
-				
+
+#if 0
+				//read dump mem
+				int pagecount = 0;
+				char* pdump;
+				char chdump;
+				FILE* fdump;
+				fdump = fopen("ddd.bin", "wb");
+				encode_msg(io, BSL_CMD_CHECK_BAUD, NULL, 1);
+				while (1) {
+					send_msg(io);
+					ret = recv_msg(io);
+					if (recv_type(io) == BSL_CMD_READ_END) break;
+					pdump = (char*)(io->raw_buf + 4);
+					for (i = 0; i < 512; i++)
+					{
+						chdump = *(pdump++);
+						if (chdump == 0x7d)
+						{
+							if (*pdump == 0x5d || *pdump == 0x5e) chdump = *(pdump++) + 0x20;
+						}
+						fputc(chdump, fdump);
+					}
+					DBG_LOG("dump page count %d\n", ++pagecount);
+				}
+				fclose(fdump);
+				DBG_LOG("dump mem end\n");
+				//end
+#endif
+
 				encode_msg(io, BSL_CMD_CONNECT, NULL, 0);
 				send_and_check(io);
 				DBG_LOG("CMD_CONNECT FDL1\n");
