@@ -1003,9 +1003,7 @@ int main(int argc, char **argv) {
 	int verbose = 0, fdl_loaded = 0, exec_addr = 0;
 	uint32_t ram_addr = ~0u;
 	int keep_charge = 1, end_data = 1, blk_size = 0;
-	char exechex[5];
 	char execfile[32];
-	int selflen = strlen(argv[0]);
 
 #if USE_LIBUSB
 	ret = libusb_init(NULL);
@@ -1083,17 +1081,6 @@ int main(int argc, char **argv) {
 	encode_msg(io, BSL_CMD_CONNECT, NULL, 0);
 	send_and_check(io);
 	DBG_LOG("CMD_CONNECT bootrom\n");
-
-	if (strcmp(argv[0] + selflen - 4, ".exe") == 0) { selflen -= 4; }
-	if (strstr(argv[0] + selflen - 4, "dump")) { ; }
-	else {
-		exechex[0] = argv[0][selflen - 4];
-		exechex[1] = argv[0][selflen - 3];
-		exechex[2] = argv[0][selflen - 2];
-		exechex[3] = argv[0][selflen - 1];
-		exechex[4] = '\0';
-		exec_addr = strtoll(exechex, NULL, 16);
-	}
 
 	while (argc > 1) {
 		if (!strcmp(argv[1], "fdl")) {
