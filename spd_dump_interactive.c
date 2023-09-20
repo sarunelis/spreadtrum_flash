@@ -1245,13 +1245,13 @@ int main(int argc, char **argv) {
 				// Feature phones respond immediately,
 				// but it may take a second for a smartphone to respond.
 				ret = recv_msg_timeout(io, 15000);
-				if (!ret) { DBG_LOG("timeout reached\n");continue; }
+				if (!ret) ERR_EXIT("timeout reached\n");
 				ret = recv_type(io);
 				// Is it always bullshit?
 				if (ret == BSL_REP_INCOMPATIBLE_PARTITION)
 					DBG_LOG("FDL2: incompatible partition\n");
 				else if (ret != BSL_REP_ACK)
-					{ DBG_LOG("unexpected response (0x%04x)\n", ret);continue; }
+					ERR_EXIT("unexpected response (0x%04x)\n", ret);
 				DBG_LOG("EXEC FDL2\n");
 				fdl2_loaded = 1;
 			}
