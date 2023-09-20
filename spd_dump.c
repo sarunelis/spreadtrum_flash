@@ -1003,7 +1003,7 @@ int main(int argc, char **argv) {
 	int verbose = 0, fdl_loaded = 0, exec_addr = 0;
 	uint32_t ram_addr = ~0u;
 	int keep_charge = 1, end_data = 1, blk_size = 0;
-	char execfile[32];
+	char execfile[40];
 
 #if USE_LIBUSB
 	ret = libusb_init(NULL);
@@ -1205,7 +1205,7 @@ int main(int argc, char **argv) {
 			FILE* fi;
 			if (argc <= 2) ERR_EXIT("bad command\n");
 			else {
-				exec_addr = strtoll(argv[2], NULL, 0);
+				exec_addr = strtol(argv[2], NULL, 0);
 				memset(execfile, 0, sizeof(execfile));
 				sprintf(execfile, "custom_exec_no_verify_%x.bin", exec_addr);
 				fi = fopen(execfile, "r");

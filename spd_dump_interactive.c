@@ -1006,7 +1006,7 @@ int main(int argc, char **argv) {
 	char *temp;
 	char str1[1000];
 	char str2[10][100];
-	char execfile[32];
+	char execfile[40];
 
 #if USE_LIBUSB
 	ret = libusb_init(NULL);
@@ -1259,7 +1259,7 @@ int main(int argc, char **argv) {
 		} else if (!strcmp(str2[1], "exec_addr")) {
 			FILE* fi;
 			if (argcount > 2) {
-				exec_addr = strtoll(str2[2], NULL, 0);
+				exec_addr = strtol(str2[2], NULL, 0);
 				memset(execfile, 0, sizeof(execfile));
 				sprintf(execfile, "custom_exec_no_verify_%x.bin", exec_addr);
 				fi = fopen(execfile, "r");
