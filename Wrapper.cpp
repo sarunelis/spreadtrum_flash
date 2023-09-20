@@ -8,47 +8,26 @@ ClassHandle* createClass() {
 }
 
 void destroyClass(ClassHandle* handle) {
-    if (handle != NULL) {
-        delete static_cast<CBootModeOpr*>(handle->obj);
-        delete handle;
-    }
+    delete static_cast<CBootModeOpr*>(handle->obj);
+    delete handle;
 }
 
 BOOL call_Initialize(ClassHandle* handle, DWORD Port) {
-    if (handle != NULL) {
-        CBootModeOpr* obj = static_cast<CBootModeOpr*>(handle->obj);
-        return obj->Initialize(Port);
-    }
-    return FALSE;
+    CBootModeOpr* obj = static_cast<CBootModeOpr*>(handle->obj);
+    return obj->Initialize(Port);
 }
 
 void call_Uninitialize(ClassHandle* handle) {
-    if (handle != NULL) {
-        CBootModeOpr* obj = static_cast<CBootModeOpr*>(handle->obj);
-        obj->Uninitialize();
-    }
+    CBootModeOpr* obj = static_cast<CBootModeOpr*>(handle->obj);
+    obj->Uninitialize();
 }
 
 int call_Read(ClassHandle* handle, UCHAR* m_RecvData, int max_len, int dwTimeout) {
-    if (handle != NULL) {
-        CBootModeOpr* obj = static_cast<CBootModeOpr*>(handle->obj);
-        return obj->Read(m_RecvData, max_len, dwTimeout);
-    }
-    return -1;
+    CBootModeOpr* obj = static_cast<CBootModeOpr*>(handle->obj);
+    return obj->Read(m_RecvData, max_len, dwTimeout);
 }
 
 int call_Write(ClassHandle* handle, UCHAR* lpData, int iDataSize) {
-    if (handle != NULL) {
-        CBootModeOpr* obj = static_cast<CBootModeOpr*>(handle->obj);
-        return obj->Write(lpData, iDataSize);
-    }
-    return -1;
+    CBootModeOpr* obj = static_cast<CBootModeOpr*>(handle->obj);
+    return obj->Write(lpData, iDataSize);
 }
-/*
-int main() {
-    ClassHandle* handle = createClass();
-    callMethod(handle);
-    destroyClass(handle);
-    return 0;
-}
-*/
