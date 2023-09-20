@@ -90,19 +90,21 @@ void CBootModeOpr::Uninitialize()
 
 int CBootModeOpr::Read(UCHAR * m_RecvData, int max_len, int dwTimeout)
 {
-	DWORD dwBegin = GetTickCount();
-	DWORD dwCur = GetTickCount();
+	ULONGLONG tBegin;
+	ULONGLONG tCur;
+	m_pChannel->Clear();
+	memset(m_RecvData, 0, max_len);
+	tBegin = GetTickCount64();
 	do
 	{
-		dwCur = GetTickCount();
+		tCur = GetTickCount64();
 		DWORD dwRead = m_pChannel->Read(m_RecvData, max_len, dwTimeout);
-
 		if (dwRead)
 		{
 			return dwRead;
 		}
-	} while ((dwCur - dwBegin) < (DWORD)dwTimeout);
-	return 0;
+	} while ((tCur - tBegin) < dwTimeout);
+	return -1;
 }
 
 int CBootModeOpr::Write(UCHAR* lpData, int iDataSize)
