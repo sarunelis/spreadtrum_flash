@@ -1056,6 +1056,33 @@ int main(int argc, char **argv) {
 	io->flags |= FLAGS_TRANSCODE;
 	io->verbose = verbose;
 
+	// Required for smartphones.
+	// Is there a way to do the same with usb-serial?
+#if USE_LIBUSB
+	ret = libusb_control_transfer(io->dev_handle,
+			0x21, 34, 0x601, 0, NULL, 0, io->timeout);
+	if (ret < 0)
+		ERR_EXIT("libusb_control_transfer failed : %s\n",
+				libusb_error_name(ret));
+	DBG_LOG("libusb_control_transfer ok\n");
+#endif
+	/* Bootloader (chk = crc16) */
+	io->flags |= FLAGS_CRC16;
+
+	encode_msg(io, BSL_CMD_CHECK_BAUD, NULL, 1);
+	send_msg(io);
+	ret = recv_msg(io);
+	if (recv_type(io) != BSL_REP_VER)
+		ERR_EXIT("wrong command or wrong mode detected, reboot your phone by pressing POWER and VOL_UP for 7-10 seconds.\n");
+	DBG_LOG("CHECK_BAUD bootrom\n");
+
+	DBG_LOG("BSL_REP_VER: ");
+	print_string(stderr, io->raw_buf + 4, READ16_BE(io->raw_buf + 2));
+
+	encode_msg(io, BSL_CMD_CONNECT, NULL, 0);
+	send_and_check(io);
+	DBG_LOG("CMD_CONNECT bootrom\n");
+
 	while (1) {
 		memset(str1, 0, sizeof(str1));
 		memset(str2, 0, sizeof(str2));
@@ -1097,33 +1124,6 @@ int main(int argc, char **argv) {
 				DBG_LOG("FDL1 ALREADY LOADED, SKIP\n");
 				continue;
 			} else {
-				// Required for smartphones.
-				// Is there a way to do the same with usb-serial?
-#if USE_LIBUSB
-				ret = libusb_control_transfer(io->dev_handle,
-						0x21, 34, 0x601, 0, NULL, 0, io->timeout);
-				if (ret < 0)
-					ERR_EXIT("libusb_control_transfer failed : %s\n",
-							libusb_error_name(ret));
-				DBG_LOG("libusb_control_transfer ok\n");
-#endif
-				/* Bootloader (chk = crc16) */
-				io->flags |= FLAGS_CRC16;
-
-				encode_msg(io, BSL_CMD_CHECK_BAUD, NULL, 1);
-				send_msg(io);
-				ret = recv_msg(io);
-				if (recv_type(io) != BSL_REP_VER)
-					ERR_EXIT("wrong command or wrong mode detected, reboot your phone by pressing POWER and VOL_UP for 7-10 seconds.\n");
-				DBG_LOG("CHECK_BAUD bootrom\n");
-
-				DBG_LOG("BSL_REP_VER: ");
-				print_string(stderr, io->raw_buf + 4, READ16_BE(io->raw_buf + 2));
-
-				encode_msg(io, BSL_CMD_CONNECT, NULL, 0);
-				send_and_check(io);
-				DBG_LOG("CMD_CONNECT bootrom\n");
-
 				send_file(io, fn, addr, end_data, 528);
 				DBG_LOG("SEND FDL1\n");
 
@@ -1261,8 +1261,9 @@ int main(int argc, char **argv) {
 				memset(execfile, 0, sizeof(execfile));
 				sprintf(execfile, "custom_exec_no_verify_%x.bin", exec_addr);
 				fi = fopen(execfile, "r");
-				if (fi == NULL) ERR_EXIT("%s does not exist.\n", execfile);
+				if (fi == NULL) DBG_LOG("%s does not exist\n", execfile);
 				else fclose(fi);
+				exec_addr = 0;
 			}
 			DBG_LOG("current exec_addr is 0x%x\n", exec_addr);
 
