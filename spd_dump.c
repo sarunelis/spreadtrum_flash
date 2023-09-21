@@ -998,7 +998,7 @@ int main(int argc, char **argv) {
 #else
 	ClassHandle* handle;
 #endif
-	spdio_t *io; int ret, i;
+	spdio_t *io = NULL; int ret, i;
 	int wait = 30 * REOPEN_FREQ;
 	int verbose = 0, fdl_loaded = 0, exec_addr = 0;
 	uint32_t ram_addr = ~0u;
@@ -1027,34 +1027,6 @@ int main(int argc, char **argv) {
 		} else break;
 	}
 
-	for (i = 0; ; i++) {
-		if (!i) DBG_LOG("Waiting for connection (%ds)\n", wait / REOPEN_FREQ);
-#if USE_LIBUSB
-		device = libusb_open_device_with_vid_pid(NULL, 0x1782, 0x4d00);
-		if (device) break;
-		if (i >= wait)
-			ERR_EXIT("libusb_open_device failed\n");
-#else
-		ret = 0;
-		FindPort(&ret);
-		if(verbose) DBG_LOG("CurTime: %.1f, CurPort: %d\n", (float)i / REOPEN_FREQ, ret);
-		if (ret > 0){
-			break;
-		}
-		if (i >= wait)
-			ERR_EXIT("find port failed\n");
-#endif
-		usleep(1000000 / REOPEN_FREQ);
-	}
-
-#if USE_LIBUSB
-	io = spdio_init(device, 0);
-#else
-	io = spdio_init(handle, ret);
-#endif
-	io->flags |= FLAGS_TRANSCODE;
-	io->verbose = verbose;
-
 	while (argc > 1) {
 		if (!strcmp(argv[1], "fdl")) {
 			const char *fn; uint32_t addr = 0; char *end;
@@ -1074,6 +1046,33 @@ int main(int argc, char **argv) {
 			if (*end) ERR_EXIT("bad command args\n");
 
 			if (!fdl_loaded) {
+				for (i = 0; ; i++) {
+					if (!i) DBG_LOG("Waiting for connection (%ds)\n", wait / REOPEN_FREQ);
+#if USE_LIBUSB
+					device = libusb_open_device_with_vid_pid(NULL, 0x1782, 0x4d00);
+					if (device) break;
+					if (i >= wait)
+						ERR_EXIT("libusb_open_device failed\n");
+#else
+					ret = 0;
+					FindPort(&ret);
+					if (verbose) DBG_LOG("CurTime: %.1f, CurPort: %d\n", (float)i / REOPEN_FREQ, ret);
+					if (ret > 0) {
+						break;
+					}
+					if (i >= wait)
+						ERR_EXIT("find port failed\n");
+#endif
+					usleep(1000000 / REOPEN_FREQ);
+				}
+
+#if USE_LIBUSB
+				io = spdio_init(device, 0);
+#else
+				io = spdio_init(handle, ret);
+#endif
+				io->flags |= FLAGS_TRANSCODE;
+				io->verbose = verbose;
 				// Required for smartphones.
 				// Is there a way to do the same with usb-serial?
 #if USE_LIBUSB

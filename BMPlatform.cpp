@@ -92,8 +92,8 @@ int CBootModeOpr::Read(UCHAR * m_RecvData, int max_len, int dwTimeout)
 {
 	ULONGLONG tBegin;
 	ULONGLONG tCur;
-	m_pChannel->Clear();
-	memset(m_RecvData, 0, max_len);
+	//m_pChannel->Clear();
+	memset(m_RecvData, 0, 8);
 	tBegin = GetTickCount64();
 	do
 	{

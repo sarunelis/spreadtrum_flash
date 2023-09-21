@@ -998,7 +998,7 @@ int main(int argc, char **argv) {
 #else
 	ClassHandle* handle;
 #endif
-	spdio_t *io; int ret, i;
+	spdio_t *io = NULL; int ret, i;
 	int wait = 30 * REOPEN_FREQ;
 	int verbose = 0, fdl1_loaded = 0, fdl2_loaded = 0, argcount = 0, exec_addr = 0;
 	uint32_t ram_addr = ~0u;
