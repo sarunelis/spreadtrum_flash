@@ -104,7 +104,7 @@ int CBootModeOpr::Read(UCHAR * m_RecvData, int max_len, int dwTimeout)
 			return dwRead;
 		}
 	} while ((tCur - tBegin) < dwTimeout);
-	return -1;
+	return 0;
 }
 
 int CBootModeOpr::Write(UCHAR* lpData, int iDataSize)

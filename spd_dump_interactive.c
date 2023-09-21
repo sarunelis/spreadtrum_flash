@@ -1103,10 +1103,10 @@ int main(int argc, char **argv) {
 				// Is there a way to do the same with usb-serial?
 #if USE_LIBUSB
 				ret = libusb_control_transfer(io->dev_handle,
-					0x21, 34, 0x601, 0, NULL, 0, io->timeout);
+						0x21, 34, 0x601, 0, NULL, 0, io->timeout);
 				if (ret < 0)
 					ERR_EXIT("libusb_control_transfer failed : %s\n",
-						libusb_error_name(ret));
+							libusb_error_name(ret));
 				DBG_LOG("libusb_control_transfer ok\n");
 #endif
 				/* Bootloader (chk = crc16) */
