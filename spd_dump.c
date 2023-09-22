@@ -974,9 +974,10 @@ static uint64_t str_to_size(const char *str) {
 	char *end; int shl = 0; uint64_t n;
 	n = strtoull(str, &end, 0);
 	if (*end) {
-		if (!strcmp(end, "K")) shl = 10;
-		else if (!strcmp(end, "M")) shl = 20;
-		else if (!strcmp(end, "G")) shl = 30;
+		char suffix = tolower(*end);
+		if (suffix == 'k') shl = 10;
+		else if (suffix == 'm') shl = 20;
+		else if (suffix == 'g') shl = 30;
 		else ERR_EXIT("unknown size suffix\n");
 	}
 	if (shl) {
