@@ -1073,6 +1073,7 @@ int main(int argc, char **argv) {
 #endif
 				io->flags |= FLAGS_TRANSCODE;
 				io->verbose = verbose;
+
 				// Required for smartphones.
 				// Is there a way to do the same with usb-serial?
 #if USE_LIBUSB

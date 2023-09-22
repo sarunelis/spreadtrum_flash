@@ -1263,9 +1263,8 @@ int main(int argc, char **argv) {
 				memset(execfile, 0, sizeof(execfile));
 				sprintf(execfile, "custom_exec_no_verify_%x.bin", exec_addr);
 				fi = fopen(execfile, "r");
-				if (fi == NULL) DBG_LOG("%s does not exist\n", execfile);
+				if (fi == NULL) { DBG_LOG("%s does not exist\n", execfile);exec_addr = 0; }
 				else fclose(fi);
-				exec_addr = 0;
 			}
 			DBG_LOG("current exec_addr is 0x%x\n", exec_addr);
 
