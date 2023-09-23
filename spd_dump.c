@@ -217,32 +217,13 @@ static void find_endpoints(libusb_device_handle *dev_handle, int result[2]) {
 }
 #endif
 
-#if USE_LIBUSB
-static spdio_t* spdio_init(libusb_device_handle *dev_handle, int flags) {
-#else
-static spdio_t* spdio_init(ClassHandle* handle, int flags) {
-#endif
+static spdio_t* spdio_init(int flags) {
 	uint8_t *p; spdio_t *io;
-
-#if USE_LIBUSB
-	int endpoints[2];
-	find_endpoints(dev_handle, endpoints);
-#else
-	call_Initialize(handle, (DWORD)flags);
-	flags = 0;
-#endif
 
 	p = (uint8_t*)malloc(sizeof(spdio_t) + RECV_BUF_LEN + (4 + 0x10000 + 2) * 3 + 2);
 	io = (spdio_t*)p; p += sizeof(spdio_t);
 	if (!p) ERR_EXIT("malloc failed\n");
 	io->flags = flags;
-#if USE_LIBUSB
-	io->dev_handle = dev_handle;
-	io->endp_in = endpoints[0];
-	io->endp_out = endpoints[1];
-#else
-	io->handle = handle;
-#endif
 	io->recv_len = 0;
 	io->recv_pos = 0;
 	io->recv_buf = p; p += RECV_BUF_LEN;
@@ -364,7 +345,6 @@ static unsigned spd_checksum(unsigned crc, const void *src, int len, int final) 
 
 static void encode_msg(spdio_t *io, int type, const void *data, size_t len) {
 	uint8_t *p, *p0; unsigned chk;
-	int i;
 
 	if (len > 0xffff)
 		ERR_EXIT("message too long\n");
@@ -534,7 +514,6 @@ static int recv_msg_timeout(spdio_t *io, int timeout) {
 }
 
 static unsigned recv_type(spdio_t *io) {
-	int a;
 	if (io->raw_len < 6) return -1;
 	return READ16_BE(io->raw_buf);
 }
@@ -583,7 +562,7 @@ static void send_file(spdio_t *io, const char *fn,
 		uint32_t start_addr, int end_data, unsigned step) {
 	uint8_t *mem; size_t size = 0;
 	uint32_t data[2], i, n;
-	int ret;
+
 	mem = loadfile(fn, &size, 0);
 	if (!mem) ERR_EXIT("loadfile(\"%s\") failed\n", fn);
 	if ((uint64_t)size >> 32) ERR_EXIT("file too big\n");
@@ -992,34 +971,26 @@ static uint64_t str_to_size(const char *str) {
 #define REOPEN_FREQ 2
 
 int main(int argc, char **argv) {
-#if USE_LIBUSB
-	libusb_device_handle *device;
-#else
-	ClassHandle* handle;
-#endif
 	spdio_t *io = NULL; int ret, i;
 	int wait = 30 * REOPEN_FREQ;
-	int verbose = 0, fdl_loaded = 0, exec_addr = 0;
+	int fdl_loaded = 0, exec_addr = 0;
 	uint32_t ram_addr = ~0u;
 	int keep_charge = 1, end_data = 1, blk_size = 0;
 	char execfile[40];
 
+	io = spdio_init(0);
 #if USE_LIBUSB
 	ret = libusb_init(NULL);
 	if (ret < 0)
 		ERR_EXIT("libusb_init failed: %s\n", libusb_error_name(ret));
 #else
-	handle = createClass();
+	io->handle = createClass();
 #endif
 
 	while (argc > 1) {
 		if (!strcmp(argv[1], "--wait")) {
 			if (argc <= 2) ERR_EXIT("bad option\n");
 			wait = atoi(argv[2]) * REOPEN_FREQ;
-			argc -= 2; argv += 2;
-		} else if (!strcmp(argv[1], "--verbose")) {
-			if (argc <= 2) ERR_EXIT("bad option\n");
-			verbose = atoi(argv[2]);
 			argc -= 2; argv += 2;
 		} else if (argv[1][0] == '-') {
 			ERR_EXIT("unknown option\n");
@@ -1048,17 +1019,15 @@ int main(int argc, char **argv) {
 				for (i = 0; ; i++) {
 					if (!i) DBG_LOG("Waiting for connection (%ds)\n", wait / REOPEN_FREQ);
 #if USE_LIBUSB
-					device = libusb_open_device_with_vid_pid(NULL, 0x1782, 0x4d00);
-					if (device) break;
+					io->dev_handle = libusb_open_device_with_vid_pid(NULL, 0x1782, 0x4d00);
+					if (io->dev_handle) break;
 					if (i >= wait)
 						ERR_EXIT("libusb_open_device failed\n");
 #else
 					ret = 0;
 					FindPort(&ret);
-					if (verbose) DBG_LOG("CurTime: %.1f, CurPort: %d\n", (float)i / REOPEN_FREQ, ret);
-					if (ret > 0) {
-						break;
-					}
+					if (io->verbose) DBG_LOG("CurTime: %.1f, CurPort: %d\n", (float)i / REOPEN_FREQ, ret);
+					if (ret) break;
 					if (i >= wait)
 						ERR_EXIT("find port failed\n");
 #endif
@@ -1066,12 +1035,14 @@ int main(int argc, char **argv) {
 				}
 
 #if USE_LIBUSB
-				io = spdio_init(device, 0);
+				int endpoints[2];
+				find_endpoints(io->dev_handle, endpoints);
+				io->endp_in = endpoints[0];
+				io->endp_out = endpoints[1];
 #else
-				io = spdio_init(handle, ret);
+				call_Initialize(io->handle, (DWORD)ret);
 #endif
 				io->flags |= FLAGS_TRANSCODE;
-				io->verbose = verbose;
 
 				// Required for smartphones.
 				// Is there a way to do the same with usb-serial?
@@ -1162,11 +1133,6 @@ int main(int argc, char **argv) {
 				encode_msg(io, BSL_CMD_CONNECT, NULL, 0);
 				send_and_check(io);
 				DBG_LOG("CMD_CONNECT FDL1\n");
-
-				//default 115200, BSL_CMD_CHANGE_BAUD optional
-				//12(0x0000000c) Bytes
-				//7E 00 09 00 04 00 07 08 00 F7 EB 7E
-				//Baudrate: 460800
 
 				if (keep_charge) {
 					encode_msg(io, BSL_CMD_KEEP_CHARGE, NULL, 0);
@@ -1356,11 +1322,12 @@ int main(int argc, char **argv) {
 		}
 	}
 
+#if !USE_LIBUSB
+	destroyClass(io->handle);
+#endif
 	spdio_free(io);
 #if USE_LIBUSB
 	libusb_exit(NULL);
-#else
-	destroyClass(handle);
 #endif
 	return 0;
 }
