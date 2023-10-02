@@ -243,6 +243,7 @@ static void spdio_free(spdio_t* io) {
 	libusb_close(io->dev_handle);
 #else
 	call_Uninitialize(io->handle);
+	destroyClass(io->handle);
 #endif
 	free(io);
 }
@@ -1328,9 +1329,6 @@ int main(int argc, char **argv) {
 		}
 	}
 
-#if !USE_LIBUSB
-	destroyClass(io->handle);
-#endif
 	spdio_free(io);
 #if USE_LIBUSB
 	libusb_exit(NULL);
