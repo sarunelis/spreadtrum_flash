@@ -36,6 +36,7 @@
 #include <setupapi.h>
 #include "Wrapper.h"
 #pragma comment(lib, "Setupapi.lib")
+#define ftello _ftelli64
 
 BOOL FindPort(DWORD* pPort)
 {
@@ -241,6 +242,7 @@ static void spdio_free(spdio_t* io) {
 	libusb_close(io->dev_handle);
 #else
 	call_Uninitialize(io->handle);
+	destroyClass(io->handle);
 #endif
 	free(io);
 }
@@ -892,7 +894,7 @@ static void load_partition(spdio_t *io, const char *name,
 	if (!fi) ERR_EXIT("fopen(load) failed\n");
 
 	fseek(fi, 0, SEEK_END);
-	len = ftell(fi);
+	len = ftello(fi);
 	fseek(fi, 0, SEEK_SET);
 	DBG_LOG("file size : 0x%llx\n", (long long)len);
 
@@ -1380,9 +1382,6 @@ int main(int argc, char **argv) {
 		}
 	}
 
-#if !USE_LIBUSB
-	destroyClass(io->handle);
-#endif
 	spdio_free(io);
 #if USE_LIBUSB
 	libusb_exit(NULL);
