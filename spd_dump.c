@@ -978,7 +978,7 @@ int main(int argc, char **argv) {
 	int wait = 30 * REOPEN_FREQ;
 	int fdl_loaded = 0, exec_addr = 0;
 	uint32_t ram_addr = ~0u;
-	int keep_charge = 1, end_data = 1, blk_size = 0;
+	int keep_charge = 1, end_data = 1, blk_size = 0, disable_transcode = 1;
 	char execfile[40];
 
 	io = spdio_init(0);
@@ -1170,6 +1170,13 @@ int main(int argc, char **argv) {
 				else if (ret != BSL_REP_ACK)
 					ERR_EXIT("unexpected response (0x%04x)\n", ret);
 				DBG_LOG("EXEC FDL2\n");
+
+				if (disable_transcode) {
+					encode_msg(io, BSL_CMD_DISABLE_TRANSCODE, NULL, 0);
+					send_and_check(io);
+					io->flags &= ~FLAGS_TRANSCODE;
+					DBG_LOG("DISABLE_TRANSCODE\n");
+				}
 			}
 			argc -= 1; argv += 1;
 
