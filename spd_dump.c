@@ -588,6 +588,7 @@ static void send_file(spdio_t *io, const char *fn,
 
 	encode_msg(io, BSL_CMD_END_DATA, NULL, 0);
 	send_and_check(io);
+	DBG_LOG("SEND %s to 0x%x\n", fn, start_addr);
 }
 
 static unsigned dump_flash(spdio_t *io,
@@ -998,15 +999,13 @@ int main(int argc, char **argv) {
 			if (argc <= 2) ERR_EXIT("bad option\n");
 			io->verbose = atoi(argv[2]);
 			argc -= 2; argv += 2;
-		} else if (argv[1][0] == '-') {
-			ERR_EXIT("unknown option\n");
 		} else break;
 	}
 
 	while (argc > 1) {
-		if (!strcmp(argv[1], "fdl")) {
+		if (!strncmp(argv[1], "fdl", 3)) {
 			const char *fn; uint32_t addr = 0; char *end;
-			if (argc <= 3) ERR_EXIT("bad command\n");
+			if (argc <= 3) ERR_EXIT("fdl FILE addr\n");
 
 			fn = argv[2];
 			end = argv[3];
@@ -1021,7 +1020,10 @@ int main(int argc, char **argv) {
 			addr += strtoll(end, &end, 0);
 			if (*end) ERR_EXIT("bad command args\n");
 
-			if (!fdl_loaded) {
+			if (fdl_loaded) {
+				send_file(io, fn, addr, end_data,
+					blk_size ? blk_size : 2112);
+			} else {
 				for (i = 0; ; i++) {
 					if (!i) DBG_LOG("Waiting for connection (%ds)\n", wait / REOPEN_FREQ);
 #if USE_LIBUSB
@@ -1078,7 +1080,6 @@ int main(int argc, char **argv) {
 				DBG_LOG("CMD_CONNECT bootrom\n");
 
 				send_file(io, fn, addr, end_data, 528);
-				DBG_LOG("SEND FDL1\n");
 
 				if (exec_addr) {
 					send_file(io, execfile, exec_addr, 0, 528);
@@ -1145,10 +1146,6 @@ int main(int argc, char **argv) {
 					send_and_check(io);
 					DBG_LOG("KEEP_CHARGE FDL1\n");
 				}
-			} else {
-				send_file(io, fn, addr, end_data,
-					blk_size ? blk_size : 2112);
-				DBG_LOG("SEND %s\n", fn);
 			}
 
 			fdl_loaded++;
@@ -1181,7 +1178,7 @@ int main(int argc, char **argv) {
 
 		} else if (!strcmp(argv[1], "exec_addr")) {
 			FILE* fi;
-			if (argc <= 2) ERR_EXIT("bad command\n");
+			if (argc <= 2) ERR_EXIT("exec_addr addr\n");
 			else {
 				exec_addr = strtol(argv[2], NULL, 0);
 				memset(execfile, 0, sizeof(execfile));
@@ -1230,7 +1227,7 @@ int main(int argc, char **argv) {
 
 		} else if (!strcmp(argv[1], "read_part")) {
 			const char *name, *fn; uint64_t offset, size;
-			if (argc <= 5) ERR_EXIT("bad command\n");
+			if (argc <= 5) ERR_EXIT("read_part part_name offset size FILE\n");
 
 			name = argv[2];
 			offset = str_to_size(argv[3]);
@@ -1243,22 +1240,22 @@ int main(int argc, char **argv) {
 			argc -= 5; argv += 5;
 
 		} else if (!strcmp(argv[1], "partition_list")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
+			if (argc <= 2) ERR_EXIT("partition_list FILE\n");
 			partition_list(io, argv[2]);
 			argc -= 2; argv += 2;
 
 		} else if (!strcmp(argv[1], "repartition")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
+			if (argc <= 2) ERR_EXIT("repartition FILE\n");
 			repartition(io, argv[2]);
 			argc -= 2; argv += 2;
 
 		} else if (!strcmp(argv[1], "erase_part")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
+			if (argc <= 2) ERR_EXIT("erase_part part_name\n");
 			erase_partition(io, argv[2]);
 			argc -= 2; argv += 2;
 
 		} else if (!strcmp(argv[1], "write_part")) {
-			if (argc <= 3) ERR_EXIT("bad command\n");
+			if (argc <= 3) ERR_EXIT("write_part part_name FILE\n");
 			load_partition(io, argv[2], argv[3],
 					blk_size ? blk_size : 4096);
 			argc -= 3; argv += 3;
@@ -1268,7 +1265,7 @@ int main(int argc, char **argv) {
 			argc -= 1; argv += 1;
 
 		} else if (!strcmp(argv[1], "blk_size")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
+			if (argc <= 2) ERR_EXIT("blk_size byte\n\tmax is 65535\n");
 			blk_size = strtol(argv[2], NULL, 0);
 			blk_size = blk_size < 0 ? 0 :
 					blk_size > 0xffff ? 0xffff : blk_size;
@@ -1301,17 +1298,17 @@ int main(int argc, char **argv) {
 			argc -= 2; argv += 2;
 
 		} else if (!strcmp(argv[1], "keep_charge")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
+			if (argc <= 2) ERR_EXIT("keep_charge {0,1}\n");
 			keep_charge = atoi(argv[2]);
 			argc -= 2; argv += 2;
 
 		} else if (!strcmp(argv[1], "timeout")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
+			if (argc <= 2) ERR_EXIT("timeout ms\n");
 			io->timeout = atoi(argv[2]);
 			argc -= 2; argv += 2;
 
 		} else if (!strcmp(argv[1], "end_data")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
+			if (argc <= 2) ERR_EXIT("end_data {0,1}\n");
 			end_data = atoi(argv[2]);
 			argc -= 2; argv += 2;
 
@@ -1326,12 +1323,28 @@ int main(int argc, char **argv) {
 			argc -= 1; argv += 1;
 
 		} else if (!strcmp(argv[1], "verbose")) {
-			if (argc <= 2) ERR_EXIT("bad command\n");
+			if (argc <= 2) ERR_EXIT("verbose {0,1,2}\n");
 			io->verbose = atoi(argv[2]);
 			argc -= 2; argv += 2;
 
 		} else {
-			ERR_EXIT("unknown command\n");
+			DBG_LOG("exec_addr addr\n");
+			DBG_LOG("fdl FILE addr\n");
+			DBG_LOG("exec\n");
+			DBG_LOG("read_part part_name offset size FILE\n");
+			DBG_LOG("write_part part_name FILE\n");
+			DBG_LOG("erase_part part_name\n");
+			DBG_LOG("partition_list FILE\n");
+			DBG_LOG("repartition FILE\n");
+			DBG_LOG("reset\n");
+			DBG_LOG("poweroff\n");
+			DBG_LOG("timeout ms\n");
+			DBG_LOG("blk_size byte\n\tmax is 65535\n");
+			DBG_LOG("disable_transcode\n");
+			DBG_LOG("keep_charge {0,1}\n");
+			DBG_LOG("end_data {0,1}\n");
+			DBG_LOG("verbose {0,1,2}\n");
+			break;
 		}
 	}
 
