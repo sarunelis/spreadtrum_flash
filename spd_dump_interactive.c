@@ -589,6 +589,7 @@ static void send_file(spdio_t *io, const char *fn,
 
 	encode_msg(io, BSL_CMD_END_DATA, NULL, 0);
 	send_and_check(io);
+	DBG_LOG("SEND %s to 0x%x\n", fn, start_addr);
 }
 
 static unsigned dump_flash(spdio_t *io,
@@ -1006,9 +1007,6 @@ int main(int argc, char **argv) {
 			if (argc <= 2) ERR_EXIT("bad option\n");
 			stage = atoi(argv[2]);
 			argc -= 2; argv += 2;
-		}
-		else if (argv[1][0] == '-') {
-			ERR_EXIT("unknown option\n");
 		} else break;
 	}
 
@@ -1104,9 +1102,9 @@ int main(int argc, char **argv) {
 			temp = strtok(NULL," ");
 		}
 
-		if (!strcmp(str2[1], "fdl1")) {
+		if (!strncmp(str2[1], "fdl", 3)) {
 			const char *fn; uint32_t addr = 0; char *end;FILE *fi;
-			if (argcount <= 3) { DBG_LOG("bad command\n");continue; }
+			if (argcount <= 3) { DBG_LOG("fdl FILE addr\n");continue; }
 
 			fn = str2[2];
 			fi = fopen(fn, "r");
@@ -1125,12 +1123,14 @@ int main(int argc, char **argv) {
 			addr += strtoll(end, &end, 0);
 			if (*end) { DBG_LOG("bad command args\n");continue; }
 
-			if (fdl1_loaded) {
-				DBG_LOG("FDL1 ALREADY LOADED, SKIP\n");
+			if (fdl2_loaded) {
+				DBG_LOG("FDL2 ALREADY LOADED, SKIP\n");
 				continue;
+			} else if (fdl1_loaded) {
+				send_file(io, fn, addr, end_data,
+					blk_size ? blk_size : 2112);
 			} else {
 				send_file(io, fn, addr, end_data, 528);
-				DBG_LOG("SEND FDL1\n");
 
 				if (exec_addr) {
 					send_file(io, execfile, exec_addr, 0, 528);
@@ -1199,45 +1199,12 @@ int main(int argc, char **argv) {
 				}
 				fdl1_loaded = 1;
 			}
-		} else if (!strcmp(str2[1], "fdl2")) {
-			const char *fn; uint32_t addr = 0; char *end;FILE *fi;
-			if (argcount <= 3) { DBG_LOG("bad command\n");continue; }
-
-			fn = str2[2];
-			fi = fopen(fn, "r");
-			if (fi == NULL) { DBG_LOG("File does not exist.\n");continue; }
-			else fclose(fi);
-
-			end = str2[3];
-			if (!memcmp(end, "ram", 3)) {
-				int a = end[3];
-				if (a != '+' && a)
-					{ DBG_LOG("bad command args\n");continue; }
-				if (ram_addr == ~0u)
-					{ DBG_LOG("ram address is unknown\n");continue; }
-				end += 3; addr = ram_addr;
-			}
-			addr += strtoll(end, &end, 0);
-			if (*end) { DBG_LOG("bad command args\n");continue; }
-
-			if (!fdl1_loaded) {
-				DBG_LOG("FDL1 NOT READY, LOAD FDL1 FIRST\n");
-				continue;
-			} else if (fdl2_loaded) {
-				DBG_LOG("FDL2 ALREADY LOADED, SKIP\n");
-				continue;
-			} else {
-				send_file(io, fn, addr, end_data,
-					blk_size ? blk_size : 2112);
-				DBG_LOG("SEND %s\n", fn);
-			}
 
 		} else if (!strcmp(str2[1], "exec")) {
 			if (fdl2_loaded) {
 				DBG_LOG("FDL2 ALREADY LOADED, SKIP\n");
 				continue;
-			}
-			else if (fdl1_loaded) {
+			} else if (fdl1_loaded) {
 				encode_msg(io, BSL_CMD_EXEC_DATA, NULL, 0);
 				send_msg(io);
 				// Feature phones respond immediately,
@@ -1307,7 +1274,7 @@ int main(int argc, char **argv) {
 
 		} else if (!strcmp(str2[1], "read_part")) {
 			const char *name, *fn; uint64_t offset, size;
-			if (argcount <= 5) { DBG_LOG("bad command\n");continue; }
+			if (argcount <= 5) { DBG_LOG("read_part part_name offset size FILE\n");continue; }
 
 			name = str2[2];
 			offset = str_to_size(str2[3]);
@@ -1319,12 +1286,12 @@ int main(int argc, char **argv) {
 					blk_size ? blk_size : 4096);
 
 		} else if (!strcmp(str2[1], "partition_list")) {
-			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			if (argcount <= 2) { DBG_LOG("partition_list FILE\n");continue; }
 			partition_list(io, str2[2]);
 
 		} else if (!strcmp(str2[1], "repartition")) {
 			const char *fn;FILE *fi;
-			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			if (argcount <= 2) { DBG_LOG("repartition FILE\n");continue; }
 			fn = str2[2];
 			fi = fopen(fn, "r");
 			if (fi == NULL) { DBG_LOG("File does not exist.\n");continue; }
@@ -1332,12 +1299,12 @@ int main(int argc, char **argv) {
 			repartition(io, str2[2]);
 
 		} else if (!strcmp(str2[1], "erase_part")) {
-			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			if (argcount <= 2) { DBG_LOG("erase_part part_name\n");continue; }
 			erase_partition(io, str2[2]);
 
 		} else if (!strcmp(str2[1], "write_part")) {
 			const char *fn;FILE *fi;
-			if (argcount <= 3) { DBG_LOG("bad command\n");continue; }
+			if (argcount <= 3) { DBG_LOG("write_part part_name FILE\n");continue; }
 			fn = str2[3];
 			fi = fopen(fn, "r");
 			if (fi == NULL) { DBG_LOG("File does not exist.\n");continue; }
@@ -1349,7 +1316,7 @@ int main(int argc, char **argv) {
 			read_pactime(io);
 
 		} else if (!strcmp(str2[1], "blk_size")) {
-			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			if (argcount <= 2) { DBG_LOG("blk_size byte\n\tmax is 65535\n");continue; }
 			blk_size = strtol(str2[2], NULL, 0);
 			blk_size = blk_size < 0 ? 0 :
 					blk_size > 0xffff ? 0xffff : blk_size;
@@ -1378,15 +1345,15 @@ int main(int argc, char **argv) {
 			io->flags = f | (a ? FLAGS_TRANSCODE : 0);
 
 		} else if (!strcmp(str2[1], "keep_charge")) {
-			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			if (argcount <= 2) { DBG_LOG("keep_charge {0,1}\n");continue; }
 			keep_charge = atoi(str2[2]);
 
 		} else if (!strcmp(str2[1], "timeout")) {
-			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			if (argcount <= 2) { DBG_LOG("timeout ms\n");continue; }
 			io->timeout = atoi(str2[2]);
 
 		} else if (!strcmp(str2[1], "end_data")) {
-			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			if (argcount <= 2) { DBG_LOG("end_data {0,1}\n");continue; }
 			end_data = atoi(str2[2]);
 
 		} else if (!strcmp(str2[1], "reset")) {
@@ -1408,11 +1375,26 @@ int main(int argc, char **argv) {
 			break;
 
 		} else if (!strcmp(str2[1], "verbose")) {
-			if (argcount <= 2) { DBG_LOG("bad command\n");continue; }
+			if (argcount <= 2) { DBG_LOG("verbose {0,1,2}\n");continue; }
 			io->verbose = atoi(str2[2]);
 
 		} else if (strlen(str2[1])){
-			DBG_LOG("unknown command\n");
+			DBG_LOG("exec_addr [addr]\n");
+			DBG_LOG("fdl FILE addr\n");
+			DBG_LOG("exec\n");
+			DBG_LOG("read_part part_name offset size FILE\n");
+			DBG_LOG("write_part part_name FILE\n");
+			DBG_LOG("erase_part part_name\n");
+			DBG_LOG("partition_list FILE\n");
+			DBG_LOG("repartition FILE\n");
+			DBG_LOG("reset\n");
+			DBG_LOG("poweroff\n");
+			DBG_LOG("timeout ms\n");
+			DBG_LOG("blk_size byte\n\tmax is 65535\n");
+			DBG_LOG("disable_transcode\n");
+			DBG_LOG("keep_charge {0,1}\n");
+			DBG_LOG("end_data {0,1}\n");
+			DBG_LOG("verbose {0,1,2}\n");
 		}
 	}
 
