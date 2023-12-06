@@ -585,10 +585,10 @@ static void send_file(spdio_t *io, const char *fn,
 	}
 	free(mem);
 
-	if (!end_data) return;
-
-	encode_msg(io, BSL_CMD_END_DATA, NULL, 0);
-	send_and_check(io);
+	if (end_data) {
+		encode_msg(io, BSL_CMD_END_DATA, NULL, 0);
+		send_and_check(io);
+	}
 	DBG_LOG("SEND %s to 0x%x\n", fn, start_addr);
 }
 
@@ -853,16 +853,23 @@ static void partition_list(spdio_t *io, const char *fn) {
 		if (!fo) ERR_EXIT("fopen failed\n");
 		fprintf(fo, "<Partitions>\n");
 	}
+	int divisor = 10;
+	DBG_LOG("detecting sector size\n");
+	p = io->raw_buf + 4;
+	for (i = 0; i < n; i++, p += 0x4c) {
+		size = READ32_LE(p + 0x48);
+		while (!(size >> divisor)) divisor--;
+	}
 	p = io->raw_buf + 4;
 	for (i = 0; i < n; i++, p += 0x4c) {
 		ret = copy_from_wstr(name, 36, (uint16_t*)p);
 		if (ret) ERR_EXIT("bad partition name\n");
 		size = READ32_LE(p + 0x48);
-		DBG_LOG("[%d] %s, %u (%u)\n", i, name, size >> 10, size);
+		DBG_LOG("[%d] %s, %u (%u)\n", i, name, size >> divisor, size);
 		if (fo) {
 			fprintf(fo, "    <Partition id=\"%s\" size=\"", name);
 			if (i + 1 == n) fprintf(fo, "0x%x\"/>\n", ~0);
-			else fprintf(fo, "%u\"/>\n", size >> 10);
+			else fprintf(fo, "%u\"/>\n", size >> divisor);
 		}
 	}
 	if (fo) {
