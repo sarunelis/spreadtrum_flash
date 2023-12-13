@@ -36,6 +36,7 @@
 #include <setupapi.h>
 #include "Wrapper.h"
 #pragma comment(lib, "Setupapi.lib")
+#define fseeko _fseeki64
 #define ftello _ftelli64
 
 BOOL FindPort(DWORD* pPort)
