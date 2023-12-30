@@ -1,7 +1,8 @@
 
 #define HDLC_HEADER 0x7e
 #define HDLC_ESCAPE 0x7d
-
+#define FDL1_DUMP_MEM 0
+#define AUTO_DISABLE_TRANSCODE 0
 /*
 
 SC6531EFM.xml (SC6531E):
