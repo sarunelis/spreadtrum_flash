@@ -999,7 +999,7 @@ static uint64_t str_to_size_ubi(const char* str, int *nand_info) {
 			}
 			else
 			{
-				DBG_LOG("only support mb as unit, will not treat kb/gb as ubifs size\n");
+				DBG_LOG("only support mb as unit, will not treat kb/gb as ubi size\n");
 				return str_to_size(&str[3]);
 			}
 		}
@@ -1015,7 +1015,7 @@ int main(int argc, char **argv) {
 	int fdl1_loaded = 0, fdl2_loaded = 0, argcount = 0, exec_addr = 0, stage = -1, nand_id = 0x15;
 	int nand_info[3];
 	uint32_t ram_addr = ~0u;
-	int keep_charge = 1, end_data = 1, blk_size = 0, disable_transcode = 1;
+	int keep_charge = 1, end_data = 1, blk_size = 0;
 	char *temp;
 	char str1[1000];
 	char str2[10][100];
@@ -1071,9 +1071,6 @@ int main(int argc, char **argv) {
 	io->endp_out = endpoints[1];
 #else
 	call_Initialize(io->handle, (DWORD)ret);
-	nand_info[0] = (uint8_t)pow(2, nand_id & 3); //page size
-	nand_info[1] = 32 / (uint8_t)pow(2, (nand_id >> 2) & 3); //spare area size
-	nand_info[2] = 64 * (uint8_t)pow(2, (nand_id >> 4) & 3); //block size
 #endif
 	io->flags |= FLAGS_TRANSCODE;
 
@@ -1099,7 +1096,9 @@ int main(int argc, char **argv) {
 		break;
 	case 2:
 		io->flags &= ~FLAGS_CRC16;
-		if (disable_transcode) io->flags &= ~FLAGS_TRANSCODE;
+#if AUTO_DISABLE_TRANSCODE
+		io->flags &= ~FLAGS_TRANSCODE;
+#endif
 		fdl1_loaded = 1;
 		fdl2_loaded = 1;
 		break;
@@ -1198,7 +1197,7 @@ int main(int argc, char **argv) {
 				DBG_LOG("BSL_REP_VER: ");
 				print_string(stderr, io->raw_buf + 4, READ16_BE(io->raw_buf + 2));
 
-#if 0
+#if FDL1_DUMP_MEM
 				//read dump mem
 				int pagecount = 0;
 				char* pdump;
@@ -1257,13 +1256,15 @@ int main(int argc, char **argv) {
 				else if (ret != BSL_REP_ACK)
 					ERR_EXIT("unexpected response (0x%04x)\n", ret);
 				DBG_LOG("EXEC FDL2\n");
-
-				if (disable_transcode) {
-					encode_msg(io, BSL_CMD_DISABLE_TRANSCODE, NULL, 0);
-					send_and_check(io);
-					io->flags &= ~FLAGS_TRANSCODE;
-					DBG_LOG("DISABLE_TRANSCODE\n");
-				}
+#if AUTO_DISABLE_TRANSCODE
+				encode_msg(io, BSL_CMD_DISABLE_TRANSCODE, NULL, 0);
+				send_and_check(io);
+				io->flags &= ~FLAGS_TRANSCODE;
+				DBG_LOG("DISABLE_TRANSCODE\n");
+#endif
+				nand_info[0] = (uint8_t)pow(2, nand_id & 3); //page size
+				nand_info[1] = 32 / (uint8_t)pow(2, (nand_id >> 2) & 3); //spare area size
+				nand_info[2] = 64 * (uint8_t)pow(2, (nand_id >> 4) & 3); //block size
 				fdl2_loaded = 1;
 			}
 
@@ -1353,6 +1354,7 @@ int main(int argc, char **argv) {
 		} else if (!strcmp(str2[1], "write_part")) {
 			const char *fn;FILE *fi;
 			if (argcount <= 3) { DBG_LOG("write_part part_name FILE\n");continue; }
+			if (strstr(str2[2], "fixnv")) { DBG_LOG("write %s is not supported\n", str2[2]); continue; }
 			fn = str2[3];
 			fi = fopen(fn, "r");
 			if (fi == NULL) { DBG_LOG("File does not exist.\n");continue; }
@@ -1431,7 +1433,7 @@ int main(int argc, char **argv) {
 			DBG_LOG("fdl FILE addr\n");
 			DBG_LOG("exec\n");
 			DBG_LOG("read_part part_name offset size FILE\n");
-			DBG_LOG("(read ubifs on nand) read_part system 0 ubi40m system.bin\n");
+			DBG_LOG("(read ubi on nand) read_part system 0 ubi40m system.bin\n");
 			DBG_LOG("write_part part_name FILE\n");
 			DBG_LOG("erase_part part_name\n");
 			DBG_LOG("partition_list FILE\n");
