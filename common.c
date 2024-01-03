@@ -880,52 +880,6 @@ unsigned short crc16(unsigned short crc, unsigned char const* buffer, unsigned i
 	return crc;
 }
 
-#define outputOffset (memOffset - 0x200)
-uint8_t* nvdump2nvitem(uint8_t* mem, size_t *size)
-{
-	uint8_t* output = (uint8_t*)malloc(*size);
-	size_t memOffset = 0;
-
-	if (!output) ERR_EXIT("malloc failed\n");
-	memOffset += 0x200;
-	memcpy(output + outputOffset, mem + memOffset, sizeof(uint32_t));
-	memOffset += sizeof(uint32_t);
-
-	uint16_t tmp[2];
-	while (1)
-	{
-		tmp[0] = 0;
-		tmp[1] = 0;
-		memcpy(tmp, mem + memOffset, sizeof(tmp));
-		uint16_t itemSize = tmp[1];
-
-		memcpy(output + outputOffset, mem + memOffset, sizeof(uint16_t));
-		memOffset += sizeof(uint16_t);
-		memcpy(output + outputOffset, mem + memOffset, sizeof(uint16_t));
-		memOffset += sizeof(uint16_t);
-		memcpy(output + outputOffset, mem + memOffset, sizeof(char) * itemSize);
-		memOffset += sizeof(char) * itemSize;
-
-		uint32_t doffset = ((memOffset + 3) & 0xFFFFFFFC) - memOffset;
-		if (doffset)
-		{
-			char* nulldata = (char*)malloc(doffset);
-			memset(nulldata, 0, doffset);
-			memcpy(output + outputOffset, nulldata, doffset);
-			free(nulldata);
-			memOffset += doffset;
-		}
-		if (*(uint16_t*)(mem + memOffset) == 0xffff) {
-			memcpy(output + outputOffset, mem + memOffset, sizeof(char) * 8);
-			memOffset += 8;
-			break;
-		}
-	}
-	*size = outputOffset;
-	free(mem);
-	return output;
-}
-
 void load_nv_partition(spdio_t* io, const char* name,
 	const char* fn, unsigned step) {
 	size_t offset, rsz;
@@ -937,7 +891,38 @@ void load_nv_partition(spdio_t* io, const char* name,
 
 	mem = loadfile(fn, &len, 0);
 	if (!mem) ERR_EXIT("loadfile(\"%s\") failed\n", fn);
-	if (*(uint32_t*)mem == 0x00004e56) mem = nvdump2nvitem(mem, &len);
+	{
+		uint8_t* output = (uint8_t*)malloc(len);
+		size_t memOffset = 0;
+		len = 0;
+
+		if (!output) ERR_EXIT("malloc failed\n");
+		if (*(uint32_t*)mem == 0x00004e56) memOffset = 0x200;;
+
+		len += sizeof(uint32_t);
+
+		uint16_t tmp[2];
+		while (1)
+		{
+			tmp[0] = 0;
+			tmp[1] = 0;
+			memcpy(tmp, mem + memOffset + len, sizeof(tmp));
+			uint16_t itemSize = tmp[1];
+
+			len += sizeof(tmp);
+			len += sizeof(char) * itemSize;
+
+			uint32_t doffset = ((len + 3) & 0xFFFFFFFC) - len;
+			len += doffset;
+			if (*(uint16_t*)(mem + memOffset + len) == 0xffff) {
+				len += 8;
+				break;
+			}
+		}
+		memcpy(output, mem + memOffset, sizeof(char) * len);
+		free(mem);
+		mem = output;
+	}
 	DBG_LOG("file size : 0x%zx\n", len);
 
 	for (offset = 2; (rsz = len - offset); offset += n)
