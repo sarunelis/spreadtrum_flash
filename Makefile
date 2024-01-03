@@ -15,8 +15,8 @@ all: $(APPNAME) $(APPNAME2)
 clean:
 	$(RM) $(APPNAME) $(APPNAME2)
 
-$(APPNAME): $(APPNAME).c
+$(APPNAME): $(APPNAME).c common.c
 	$(CC) -s $(CFLAGS) -o $@ $^ $(LIBS)
 
-$(APPNAME2): $(APPNAME2).c
+$(APPNAME2): $(APPNAME2).c common.c
 	$(CC) -s $(CFLAGS) -DINTERACTIVE -o $@ $^ $(LIBS)

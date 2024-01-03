@@ -27,6 +27,9 @@
     <ClCompile Include="spd_dump_interactive.c">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="common.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="spd_cmd.h">
@@ -36,6 +39,9 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Wrapper.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="common.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
