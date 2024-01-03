@@ -532,7 +532,12 @@ static void send_and_check(spdio_t *io) {
 		ERR_EXIT("unexpected response (0x%04x)\n", ret);
 }
 
-static void check_confirm(const char *name) {
+#if NO_CONFIRM
+static void check_confirm(const char* name) {
+	return;
+}
+#else
+static void check_confirm(const char* name) {
 	char buf[4], c; int i;
 	printf("Answer \"yes\" to confirm the \"%s\" command: ", name);
 	fflush(stdout);
@@ -544,6 +549,7 @@ static void check_confirm(const char *name) {
 	} while (0);
 	ERR_EXIT("operation is not confirmed\n");
 }
+#endif
 
 static uint8_t* loadfile(const char *fn, size_t *num, size_t extra) {
 	size_t n, j = 0; uint8_t *buf = 0;
@@ -933,6 +939,69 @@ static void load_partition(spdio_t *io, const char *name,
 	send_and_check(io);
 }
 
+unsigned short crc16(unsigned short crc, unsigned char const* buffer, unsigned int len)
+{
+	while (len--)
+		crc = (unsigned short)((crc >> 8) ^ (crc16_table[(crc ^ (*buffer++)) & 0xff]));
+	return crc;
+}
+
+static void load_nv_partition(spdio_t* io, const char* name,
+	const char* fn, unsigned step) {
+	uint64_t offset, len, n64;
+	unsigned n; int ret;
+	uint8_t* mem;
+	uint16_t crc = 0;
+	uint32_t cs = 0;
+
+	mem = loadfile(fn, &len, 0);
+	if (!mem) ERR_EXIT("loadfile(\"%s\") failed\n", fn);
+	DBG_LOG("file size : 0x%llx\n", (long long)len);
+
+	for (offset = 2; (n64 = len - offset); offset += n)
+	{
+		n = n64 > step ? step : n64;
+		crc = crc16(crc, &mem[offset], n);
+		for (int i = 0; i < n; i++) cs += mem[offset + i];
+	}
+	cs += (crc & 0xff);
+	cs += (crc >> 8) & 0xff;
+	WRITE16_BE(mem, crc);
+
+	check_confirm("write partition");
+	{
+		struct {
+			uint16_t name[36];
+			uint32_t size, cs;
+		} pkt = { 0 };
+
+		ret = copy_to_wstr(pkt.name, sizeof(pkt.name) / 2, name);
+		if (ret) ERR_EXIT("name too long\n");
+		WRITE32_LE(&pkt.size, len);
+		WRITE32_LE(&pkt.cs, cs);
+		encode_msg(io, BSL_CMD_START_DATA, &pkt, sizeof(pkt));
+	}
+	send_and_check(io);
+
+	for (offset = 0; (n64 = len - offset); offset += n) {
+		n = n64 > step ? step : n64;
+		memcpy(io->temp_buf, &mem[offset], n);
+		encode_msg(io, BSL_CMD_MIDST_DATA, io->temp_buf, n);
+		send_msg(io);
+		ret = recv_msg_timeout(io, 15000);
+		if (!ret) ERR_EXIT("timeout reached\n");
+		if ((ret = recv_type(io)) != BSL_REP_ACK) {
+			DBG_LOG("unexpected response (0x%04x)\n", ret);
+			break;
+		}
+	}
+	DBG_LOG("load_nv_partition: %s, target: 0x%llx, written: 0x%llx\n",
+		name, (long long)len, (long long)offset);
+	free(mem);
+	encode_msg(io, BSL_CMD_END_DATA, NULL, 0);
+	send_and_check(io);
+}
+
 static int64_t find_partition_size(spdio_t *io, const char *name) {
 	uint32_t t32; uint64_t n64; long long offset = 0;
 	int ret, i, start = 47;
@@ -1008,7 +1077,7 @@ static uint64_t str_to_size_ubi(const char* str, int *nand_info) {
 int main(int argc, char **argv) {
 	spdio_t *io = NULL; int ret, i;
 	int wait = 30 * REOPEN_FREQ;
-	int fdl1_loaded = 0, fdl2_loaded = 0, argcount = 0, exec_addr = 0, stage = -1, nand_id = 0x15;
+	int fdl1_loaded = 0, fdl2_loaded = 0, argcount = 0, exec_addr = 0, stage = -1, nand_id = DEFAULT_NAND_ID;
 	int nand_info[3];
 	uint32_t ram_addr = ~0u;
 	int keep_charge = 1, end_data = 1, blk_size = 0;
@@ -1258,9 +1327,11 @@ int main(int argc, char **argv) {
 				io->flags &= ~FLAGS_TRANSCODE;
 				DBG_LOG("DISABLE_TRANSCODE\n");
 #endif
-				nand_info[0] = (uint8_t)pow(2, nand_id & 3); //page size
-				nand_info[1] = 32 / (uint8_t)pow(2, (nand_id >> 2) & 3); //spare area size
-				nand_info[2] = 64 * (uint8_t)pow(2, (nand_id >> 4) & 3); //block size
+				if (nand_id == DEFAULT_NAND_ID) {
+					nand_info[0] = (uint8_t)pow(2, nand_id & 3); //page size
+					nand_info[1] = 32 / (uint8_t)pow(2, (nand_id >> 2) & 3); //spare area size
+					nand_info[2] = 64 * (uint8_t)pow(2, (nand_id >> 4) & 3); //block size
+				}
 				fdl2_loaded = 1;
 			}
 
@@ -1319,7 +1390,7 @@ int main(int argc, char **argv) {
 
 		} else if (!strcmp(str2[1], "read_part")) {
 			const char *name, *fn; uint64_t offset, size;
-			if (argcount <= 5) { DBG_LOG("read_part part_name offset size FILE\n");continue; }
+			if (argcount <= 5) { DBG_LOG("read_part part_name offset size FILE\n(read ubi on nand) read_part system 0 ubi40m system.bin\n");continue; }
 
 			name = str2[2];
 			offset = str_to_size_ubi(str2[3], nand_info);
@@ -1350,13 +1421,14 @@ int main(int argc, char **argv) {
 		} else if (!strcmp(str2[1], "write_part")) {
 			const char *fn;FILE *fi;
 			if (argcount <= 3) { DBG_LOG("write_part part_name FILE\n");continue; }
-			if (strstr(str2[2], "fixnv")) { DBG_LOG("write %s is not supported\n", str2[2]); continue; }
 			fn = str2[3];
 			fi = fopen(fn, "r");
 			if (fi == NULL) { DBG_LOG("File does not exist.\n");continue; }
 			else fclose(fi);
-			load_partition(io, str2[2], str2[3],
-					blk_size ? blk_size : 4096);
+			if (strstr(str2[2], "fixnv") || strstr(str2[2], "runtimenv"))
+				load_nv_partition(io, str2[2], str2[3], blk_size ? blk_size : 4096);
+			else
+				load_partition(io, str2[2], str2[3], blk_size ? blk_size : 4096);
 
 		} else if (!strcmp(str2[1], "read_pactime")) {
 			read_pactime(io);
