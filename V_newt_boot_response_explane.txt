@@ -1,0 +1,52 @@
+  92.5        58  IN     7e 00 96 00  32 6e 65 77  74 00 00 04  00 01 00 00  ....2newt.......  856ms      1938.1.0        16:45:26.662  
+                         00 01 00 01  00 06 02 00  01 00 02 03  00 04 00 00  ................             1938.1.16                     
+                         08 00 00 05  00 08 00 ff  ff ff ff ff  ff ff ff 07  ................             1938.1.32                     
+                         00 04 00 01  00 00 00 ec  50 7e                     ........P.                   1938.1.48                     
+
+
+#define DA_INFO_MAGIC       0x7477656E  //'newt'
+#define TIME_STAMP_SIGN     0x7370      //'sp'
+/// The reply of 0x96 data packet is made into TLV format. Each identifier is replied in TLV form and distinguished by type.
+
+enum E_DA_INFO_TYPE
+{
+    E_TYPE_DISABLE_TRANS_CODE = 0,      // 0 bDisableTransCode
+    E_TYPE_IS_OLD_MEMORY,               // 1 bIsOldMemory
+    E_TYPE_SUPPORT_RAW_DATA,            // 2 bSupportRawData
+    E_TYPE_FLUSH_SIZE,                  // 3 dwFlushSize
+    E_TYPE_RANDOM_DATA,                 // 4 bRandomData
+    E_TYPE_TIME_STAMP,                  // 5 Newly defined time stamp type, used for reading timestamps
+    E_TYPE_FLASH_TYPE,                  // 6 Returns the flash type, used to determine the download of the SPL file
+    E_TYPE_SUPPORT_DUMP_UBOOT_LOG,      // 7 Returns whether the Dump Uboot log function is supported
+    E_TYPE_COMPARE_SOFTWARE,            // 8
+    E_TYPE_MAX = 0xFF
+};
+
+6e 65 77  74   // DA_INFO_MAGIC
+
+decoded TLV:
+00 00          // 0 bDisableTransCode
+04 00          // Size of Data
+01 00 00 00    // true, why Need this ?
+
+01 00          // 1 bIsOldMemory
+01 00          // Size of Data
+06             // EMMC + RPMB
+
+02 00          // 2 bSupportRawData
+01 00          // Size of Data
+02             // No Idea what is 2
+
+03 00          // 3 dwFlushSize
+04 00          // Size of Data
+00 08 00 00    // Flush or Max Flash data Frame Size ?
+
+05 00          // 5 Newly defined time stamp type, used for reading timestamps
+08 00          // Size of Data
+ff ff ff ff ff ff ff ff // Time Stamp is incorect
+
+07 00          // 7 Returns whether the Dump Uboot log function is supported
+04 00          // Size of Data
+01 00 00 00    // Who need tis ?
+
+
